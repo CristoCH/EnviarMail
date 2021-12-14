@@ -1,6 +1,7 @@
 package dad.enviaremail;
 
 import javafx.beans.property.*;
+import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -28,6 +29,8 @@ public class MailController implements Initializable {
     private StringProperty to = new SimpleStringProperty();
     private StringProperty subject = new SimpleStringProperty();
     private StringProperty message = new SimpleStringProperty();
+
+    private Task<Void> tarea;
 
     //View
 
@@ -97,37 +100,44 @@ public class MailController implements Initializable {
     @FXML
     void onSendButtonAction(ActionEvent event) {
         int portInt = Integer.parseInt(port.get());
-        try {
-            Email email = new SimpleEmail();
-            email.setHostName(smtp.get());
-            email.setSmtpPort(portInt);
-            email.setAuthenticator(new DefaultAuthenticator(from.get(), pass.get()));
-            email.setSSLOnConnect(ssl.get());
-            email.setFrom(from.get());
-            email.setSubject(subject.get());
-            email.setMsg(message.get());
-            email.addTo(to.get());
-            email.send();
 
+        tarea = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                Email email = new SimpleEmail();
+                email.setHostName(smtp.get());
+                email.setSmtpPort(portInt);
+                email.setAuthenticator(new DefaultAuthenticator(from.get(), pass.get()));
+                email.setSSLOnConnect(ssl.get());
+                email.setFrom(from.get());
+                email.setSubject(subject.get());
+                email.setMsg(message.get());
+                email.addTo(to.get());
+                email.send();
+                return null;
+            }
+        };
+
+        tarea.setOnSucceeded(e->{
             Alert alertSend = new Alert(Alert.AlertType.INFORMATION);
             alertSend.setTitle("Mensaje enviado");
             alertSend.setHeaderText("Mensaje enviado con éxito a '"+ to.get()+"'");
             Stage stage = (Stage) alertSend.getDialogPane().getScene().getWindow();
             stage.getIcons().setAll(MailApp.getPrimaryStage().getIcons());
             alertSend.showAndWait();
-
-        } catch (EmailException e) {
-            e.printStackTrace();
+        });
+        tarea.setOnFailed(e->{
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Error");
             alert.setHeaderText("No se pudo enviar el email.");
-            alert.setContentText(e.getMessage());
+            alert.setContentText(e.getSource().getException().getMessage());
             Stage stage = (Stage) alert.getDialogPane().getScene().getWindow();
             stage.getIcons().setAll(MailApp.getPrimaryStage().getIcons());
             alert.showAndWait();
+        });
 
-        }
-
+        sendButton.disableProperty().bind(tarea.runningProperty());
+        new Thread(tarea).start();
     }
 
     @FXML
